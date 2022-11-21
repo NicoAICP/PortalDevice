@@ -9,7 +9,7 @@ from digitalio import Pull
 import safe_mode
 from portal import Portal
 
-safe_mode.enable(board.Gp14, Pull.UP)
+safe_mode.enable(board.GP14, Pull.UP)
 
 #storage.disable_usb_drive()
 usb_cdc.disable()
