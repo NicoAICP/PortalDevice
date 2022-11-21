@@ -6,7 +6,7 @@ import usb_midi
 usb_cdc.disable()
 usb_midi.disable()
 
-supervisor.set_usb_identification("Activision", "Spyro Porta", int(0x1430), int(0x0150))
+supervisor.set_usb_identification("Activision", "Spyro Porta", 0x1430, 0x0150)
 
 PORTAL_REPORT_DESCRIPTOR = bytes((
   0x06, 0x00, 0xFF,  # Usage Page (Vendor Defined 0xFF00)
