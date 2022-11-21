@@ -1,8 +1,16 @@
+import board
+import storage
 import supervisor
-import usb_hid
 import usb_cdc
+import usb_hid
 import usb_midi
+from digitalio import Pull
 
+import safe_mode
+
+safe_mode.enable(board.Gp14, Pull.UP)
+
+#storage.disable_usb_drive()
 usb_cdc.disable()
 usb_midi.disable()
 
