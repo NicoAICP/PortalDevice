@@ -6,8 +6,6 @@ except ImportError:
 import usb_hid
 from usb_hid import Device 
 
-from adafruit_hid.keyboard import find_device
-
 class Portal:
     """Emulates Portal of Power
     """
@@ -42,7 +40,7 @@ class Portal:
     def __init__(self, devices: Sequence[usb_hid.Device]) -> None:
         """Create a Portal object that will send and receive HID reports.
         """
-        self.portal_device = find_device(devices, usage_page = Portal.USAGE_PAGE, usage = Portal.USAGE)              
+        self.portal_device = self.find_device(devices, usage_page = Portal.USAGE_PAGE, usage = Portal.USAGE)              
 
     @staticmethod
     def get_hid_device() -> Device:
@@ -56,3 +54,19 @@ class Portal:
             in_report_lengths = (Portal.REPORT_LENGTH,),  # The portal sends 32 bytes in its report.    ## Must match number of bytes above! (Report Size * Report Count)
             out_report_lengths = (Portal.REPORT_LENGTH,), # The portal receives 32 bytes in its report. ## Must match number of bytes above! (Report Size * Report Count)
         )
+
+    def find_device(
+        devices: Sequence[usb_hid.Device], *, usage_page: int, usage: int
+    ) -> usb_hid.Device:
+        """Search through the provided sequence of devices to find the one with the matching
+        usage_page and usage."""
+        if hasattr(devices, "send_report"):
+            devices = [devices]  # type: ignore
+        for device in devices:
+            if (
+                device.usage_page == usage_page
+                and device.usage == usage
+                and hasattr(device, "send_report")
+            ):
+                return device
+        raise ValueError("Could not find matching HID device.")
