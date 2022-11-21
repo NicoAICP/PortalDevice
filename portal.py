@@ -1,4 +1,7 @@
-from typing import Sequence
+try:
+    from typing import Sequence
+except ImportError:
+    pass
 
 import usb_hid
 from usb_hid import Device 

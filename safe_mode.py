@@ -1,6 +1,9 @@
 """Safe mode class for Pi Pico
 """
-from typing import Optional
+try:
+    from typing import Optional
+except ImportError:
+    pass
 
 import microcontroller
 from digitalio import DigitalInOut, Pull
