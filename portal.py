@@ -5,7 +5,6 @@ except ImportError:
 
 import asyncio
 import binascii
-import time
 import usb_hid
 
 from logger import Logger
@@ -51,13 +50,7 @@ class Portal:
         self.portal_hid = self.__find_device(devices)
         self.logger.log(Logger.DEBUG, str(self.portal_hid))
 
-        last_time = time.monotonic()
-        while True:
-            report_in = self.portal_hid.get_last_received_report()
-            if (report_in != None):
-                self.__handle_incoming_report(report_in)
-            if time.monotonic() - last_time > 0.1:
-                last_time = time.monotonic()
+        asyncio.run(self.__worker())
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
@@ -69,9 +62,9 @@ class Portal:
                 return device
         raise ValueError("Could not find matching HID device.")
 
-    def __handle_incoming_report(self, report_in: bytes):
+    async def __handle_incoming_report(self, report_in: bytes):
         if (report_in[0] == ord('A')):
-            self.__activate(report_in)
+            await self.__activate(report_in)
         elif (report_in[0] == ord('C')): # ignore
             self.logger.log(Logger.DEBUG, "Received: Color request -> ignore")
         elif (report_in[0] == ord('J')): # ignore
@@ -81,19 +74,19 @@ class Portal:
         elif (report_in[0] == ord('M')): # ignore
             self.logger.log(Logger.DEBUG, "Received: Speaker request -> ignore")
         elif (report_in[0] == ord('Q')):
-            self.__query(report_in)
+            await self.__query(report_in)
         elif (report_in[0] == ord('R')):
-            self.__reset(report_in)
+            await self.__reset(report_in)
         elif (report_in[0] == ord('S')): # ignore
             self.logger.log(Logger.DEBUG, "Received: Status request -> ignore")
         elif (report_in[0] == ord('W')):
-            self.__write(report_in)
+            await self.__write(report_in)
         else:
             self.logger.log(Logger.DEBUG, "Received: Unknown request:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii') + "\n")
 
-    def __reset(self, report_in: bytes):
-            self.logger.log(Logger.DEBUG, "Received: Ready (R) request:")
+    async def __reset(self, report_in: bytes):
+            self.logger.log(Logger.DEBUG, "Received: Reset (R) request:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
 
             report_out = bytearray(self.REPORT_LENGTH)
@@ -101,12 +94,12 @@ class Portal:
             report_out[1] = 0x02
             report_out[2] = 0x18
 
-            self.logger.log(Logger.DEBUG, "Sending: Ready (R) response:")
+            self.logger.log(Logger.DEBUG, "Sending: Reset (R) response:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
 
-            self.portal_hid.send_report(report_out)
+            self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    def __activate(self, report_in: bytes):
+    async def __activate(self, report_in: bytes):
             self.logger.log(Logger.DEBUG, "Received: Activate (A) request:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
 
@@ -119,9 +112,9 @@ class Portal:
             self.logger.log(Logger.DEBUG, "Sending: Activate (R) response:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
 
-            self.portal_hid.send_report(report_out)
+            self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    def __query(self, report_in: bytes):
+    async def __query(self, report_in: bytes):
             self.logger.log(Logger.DEBUG, "Received: Query (Q) request:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
 
@@ -141,9 +134,9 @@ class Portal:
             self.logger.log(Logger.DEBUG, "Sending: Query (Q) response:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
 
-            self.portal_hid.send_report(report_out)
+            self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    def __write(self, report_in: bytes):
+    async def __write(self, report_in: bytes):
             self.logger.log(Logger.DEBUG, "Received: Write (W) request:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
 
@@ -164,8 +157,20 @@ class Portal:
             self.logger.log(Logger.DEBUG, "Sending: Write (W) response:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
 
-            self.portal_hid.send_report(report_out)
+            self.portal_hid.send_report(report_out, self.REPORT_ID)
 
+    async def __worker(self):
+        self.logger.log(Logger.DEBUG, "worker starting")
+        report_task = asyncio.create_task(self.__get_last_received_report())
+        await asyncio.gather(report_task)
+        self.logger.log(Logger.DEBUG, "worker done")            
+
+    async def __get_last_received_report(self):
+        while True:
+            report_in = self.portal_hid.get_last_received_report()
+            if (report_in != None):
+                await self.__handle_incoming_report(report_in)
+                await asyncio.sleep(0.1)
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
