@@ -17,7 +17,7 @@ storage.remount("/", False)
 logger = Logger('boot.py', '/log.txt')
 logger.log(Logger.INFO, "running boot.py")
 
-#storage.disable_usb_drive()
+storage.disable_usb_drive()
 usb_cdc.disable()
 usb_midi.disable()
 
