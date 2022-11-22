@@ -4,7 +4,9 @@ except ImportError:
     pass
 
 import usb_hid
-from usb_hid import Device 
+
+from logger import Logger
+
 
 class Portal:
     """Emulates Portal of Power
@@ -40,10 +42,24 @@ class Portal:
     def __init__(self, devices: Sequence[usb_hid.Device]) -> None:
         """Create a Portal object that will send and receive HID reports.
         """
-        self.portal_device = self.find_device(devices, usage_page = Portal.USAGE_PAGE, usage = Portal.USAGE)              
+        self.logger = Logger('portal.py', '/log.txt')
+        self.logger.log(Logger.DEBUG, "__init__")
+        
+        self.portal_hid = self.__find_device(devices)
+        self.logger.log(Logger.DEBUG, str(self.portal_hid))
+
+    def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
+        """Search through the provided sequence of devices to find the USB HID Portal device.
+        """
+        if hasattr(devices, "send_report"):
+            devices = [devices]  # type: ignore
+        for device in devices:
+            if (device.usage_page == self.USAGE_PAGE and device.usage == self.USAGE and hasattr(device, "send_report")):
+                return device
+        raise ValueError("Could not find matching HID device.")
 
     @staticmethod
-    def get_hid_device() -> Device:
+    def get_hid_device() -> usb_hid.Device:
         """Create a USB HID Portal device
         """
         return usb_hid.Device(
@@ -55,18 +71,3 @@ class Portal:
             out_report_lengths = (Portal.REPORT_LENGTH,), # The portal receives 32 bytes in its report. ## Must match number of bytes above! (Report Size * Report Count)
         )
 
-    def find_device(
-        devices: Sequence[usb_hid.Device], *, usage_page: int, usage: int
-    ) -> usb_hid.Device:
-        """Search through the provided sequence of devices to find the one with the matching
-        usage_page and usage."""
-        if hasattr(devices, "send_report"):
-            devices = [devices]  # type: ignore
-        for device in devices:
-            if (
-                device.usage_page == usage_page
-                and device.usage == usage
-                and hasattr(device, "send_report")
-            ):
-                return device
-        raise ValueError("Could not find matching HID device.")
