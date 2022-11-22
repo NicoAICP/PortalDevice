@@ -3,6 +3,8 @@ try:
 except ImportError:
     pass
 
+import asyncio
+import binascii
 import usb_hid
 
 from logger import Logger
@@ -48,6 +50,8 @@ class Portal:
         self.portal_hid = self.__find_device(devices)
         self.logger.log(Logger.DEBUG, str(self.portal_hid))
 
+        asyncio.run(self.__worker())
+
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
         """
@@ -57,6 +61,19 @@ class Portal:
             if (device.usage_page == self.USAGE_PAGE and device.usage == self.USAGE and hasattr(device, "send_report")):
                 return device
         raise ValueError("Could not find matching HID device.")
+
+    async def __worker(self):
+        self.logger.log(Logger.DEBUG, "worker starting")
+        report_task = asyncio.create_task(self.__get_last_received_report())
+        await asyncio.gather(report_task)
+        self.logger.log(Logger.DEBUG, "worker done")
+
+    async def __get_last_received_report(self):
+        while True:
+            report_in = self.portal_hid.get_last_received_report()
+            if (report_in != None):
+                self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
+                await asyncio.sleep(1)
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
