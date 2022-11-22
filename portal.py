@@ -36,7 +36,7 @@ class Portal:
         0x95, 0x20,        #   Report Count (32)
         0x81, 0x00,        #   Input (Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
         0x19, 0x01,        #   Usage Minimum (0x01)
-        0x29, 0xFF,        #   Usage Maximum (0x40)
+        0x29, 0x40,        #   Usage Maximum (0x40)
         0x91, 0x00,        #   Output (Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
         0xC0,              # End Collection
     ))
