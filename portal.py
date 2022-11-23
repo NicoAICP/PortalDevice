@@ -118,13 +118,13 @@ class Portal:
             report_out[5] = self.status_index
             report_out[6] = self.is_active
 
+            self.status_index += 1
+            self.status_index %= 0xFF
+
             self.logger.log(Logger.DEBUG, "Sending: Status (S) response:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
 
-            self.__send_report(report_out)
-
-            self.status_index += 1
-            self.status_index %= 0xFF
+            self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __activate(self, report_in: bytes):
             self.logger.log(Logger.DEBUG, "Received: Activate (A) request:")
