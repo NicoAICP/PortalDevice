@@ -50,6 +50,9 @@ class Portal:
         self.portal_hid = self.__find_device(devices)
         self.logger.log(Logger.DEBUG, str(self.portal_hid))
 
+        self.status_index = 0x00
+        self.is_active = 0x00
+        
         asyncio.run(self.__worker())
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
@@ -77,8 +80,8 @@ class Portal:
             await self.__query(report_in)
         elif (report_in[0] == ord('R')):
             await self.__reset(report_in)
-        elif (report_in[0] == ord('S')): # ignore
-            self.logger.log(Logger.DEBUG, "Received: Status request -> ignore")
+        elif (report_in[0] == ord('S')):
+            await self.__status(report_in)
         elif (report_in[0] == ord('W')):
             await self.__write(report_in)
         else:
@@ -90,7 +93,7 @@ class Portal:
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
 
             report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = report_in[0]
+            report_out[0] = 0x52
             report_out[1] = 0x02
             report_out[2] = 0x18
 
@@ -99,12 +102,38 @@ class Portal:
 
             self.portal_hid.send_report(report_out, self.REPORT_ID)
 
+    async def __status(self, report_in: bytes):
+            if (report_in != None):
+                self.logger.log(Logger.DEBUG, "Received: Status (S) request:")
+                self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
+            else:
+                self.logger.log(Logger.DEBUG, "Proactive status sending...")
+
+            report_out = bytearray(self.REPORT_LENGTH)
+            report_out[0] = 0x53
+            report_out[1] = 0x03
+            report_out[2] = 0x00
+            report_out[3] = 0x00
+            report_out[4] = 0x00
+            report_out[5] = self.status_index
+            report_out[6] = self.is_active
+
+            self.logger.log(Logger.DEBUG, "Sending: Status (S) response:")
+            self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
+
+            self.__send_report(report_out)
+
+            self.status_index += 1
+            self.status_index %= 0xFF
+
     async def __activate(self, report_in: bytes):
             self.logger.log(Logger.DEBUG, "Received: Activate (A) request:")
             self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
 
+            self.is_active = report_in[1]
+
             report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = report_in[0]
+            report_out[0] = 0x41
             report_out[1] = report_in[1]
             report_out[2] = 0xFF
             report_out[3] = 0x77
@@ -124,7 +153,7 @@ class Portal:
             self.logger.log(Logger.DEBUG, "Querying: Character slot %d, data block index %d" % (slot, block))
 
             report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = report_in[0]
+            report_out[0] = 0x51
             report_out[1] = report_in[1] # character slot
             report_out[2] = report_in[2] # data block index
 
@@ -150,7 +179,7 @@ class Portal:
             # TODO: write new data block
 
             report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = report_in[0]
+            report_out[0] = 0x57
             report_out[1] = report_in[1] # character slot
             report_out[2] = report_in[2] # data block index
 
@@ -171,6 +200,8 @@ class Portal:
             if (report_in != None):
                 await self.__handle_incoming_report(report_in)
                 await asyncio.sleep(0.1)
+            else:
+                self.logger.log(Logger.DEBUG, "waiting for new report...")
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
