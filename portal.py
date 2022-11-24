@@ -4,7 +4,7 @@ except ImportError:
     pass
 
 import asyncio
-import binascii
+import struct
 import usb_hid
 
 class Portal:
@@ -70,41 +70,28 @@ class Portal:
         elif (report_in[0] == ord('Q')):
             await self.__query(report_in)
         elif (report_in[0] == ord('R')):
-            await self.__reset(report_in)
+            await self.__reset()
         elif (report_in[0] == ord('S')):
-            await self.__status(report_in)
+            await self.__status()
         elif (report_in[0] == ord('W')):
             await self.__write(report_in)
         else:
             pass
 
-    async def __reset(self, report_in: bytes):
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('R') # 0x52
-        report_out[1] = 0x02
-        report_out[2] = 0x18
+    async def __reset(self):
+        self.status_index = 0x00
+        report_out = struct.pack('>bH29x', ord('R'), 0x0218)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    async def __status(self, report_in: bytes):
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('S') # 0x53
-        report_out[1] = 0x03
-        report_out[2] = 0x00
-        report_out[3] = 0x00
-        report_out[4] = 0x00
-        report_out[5] = self.status_index
-        report_out[6] = self.is_active
+    async def __status(self):
+        report_out = struct.pack('>bIbb25x', ord('S'), 0x03000000, self.status_index, self.is_active)
+        self.portal_hid.send_report(report_out, self.REPORT_ID)
         self.status_index += 1
         self.status_index %= 0xFF
-        self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __activate(self, report_in: bytes):
         self.is_active = report_in[1]
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('A') # 0x41
-        report_out[1] = report_in[1]
-        report_out[2] = 0xFF
-        report_out[3] = 0x77
+        report_out = struct.pack('>bbH28x', ord('A'), report_in[1], 0xFF77)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __query(self, report_in: bytes):
