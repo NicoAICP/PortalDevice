@@ -4,6 +4,7 @@ except ImportError:
     pass
 
 import struct
+from toys import Toy, Slot
 import usb_hid
 
 class Portal:
@@ -19,6 +20,8 @@ class Portal:
     USAGE = 0x01
     REPORT_ID = 0
     REPORT_LENGTH = 32
+
+    MAX_TOYS = 6
 
     PORTAL_REPORT_DESCRIPTOR = bytes((
         0x06, 0x00, 0xFF,  # Usage Page (Vendor Defined 0xFF00)
@@ -43,6 +46,10 @@ class Portal:
         self.portal_hid = self.__find_device(devices)
         self.status_index = 0x00
         self.is_active = 0x00
+
+        self.slots = [Slot] * self.MAX_TOYS
+        for index in range(self.MAX_TOYS):            
+            self.slots[index].toy = Toy("/toys/toy_%d.bin" % index)
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
