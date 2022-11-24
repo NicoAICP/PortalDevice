@@ -3,7 +3,6 @@ try:
 except ImportError:
     pass
 
-import asyncio
 import struct
 import usb_hid
 
@@ -44,7 +43,6 @@ class Portal:
         self.portal_hid = self.__find_device(devices)
         self.status_index = 0x00
         self.is_active = 0x00
-        asyncio.run(self.__worker())
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
@@ -56,9 +54,14 @@ class Portal:
                 return device
         raise ValueError("Could not find matching HID device.")
 
-    async def __handle_incoming_report(self, report_in: bytes):
+    def process_reports(self):
+        report_in = self.portal_hid.get_last_received_report()
+        if (report_in != None):
+            self.__handle_incoming_report(report_in)
+
+    def __handle_incoming_report(self, report_in: bytes):
         if (report_in[0] == ord('A')):
-            await self.__activate(report_in)
+            self.__activate(report_in)
         elif (report_in[0] == ord('C')): # ignore
             pass # ignore color request
         elif (report_in[0] == ord('J')): # ignore
@@ -68,33 +71,33 @@ class Portal:
         elif (report_in[0] == ord('M')): # ignore
             pass # ignore speaker request -> ignore")
         elif (report_in[0] == ord('Q')):
-            await self.__query(report_in)
+            self.__query(report_in)
         elif (report_in[0] == ord('R')):
-            await self.__reset()
+            self.__reset()
         elif (report_in[0] == ord('S')):
-            await self.__status()
+            self.__status()
         elif (report_in[0] == ord('W')):
-            await self.__write(report_in)
+            self.__write(report_in)
         else:
             pass
 
-    async def __reset(self):
+    def __reset(self):
         self.status_index = 0x00
         report_out = struct.pack('>bH29x', ord('R'), 0x0218)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    async def __status(self):
+    def __status(self):
         report_out = struct.pack('>bIbb25x', ord('S'), 0x03000000, self.status_index, self.is_active)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
         self.status_index += 1
         self.status_index %= 0xFF
 
-    async def __activate(self, report_in: bytes):
+    def __activate(self, report_in: bytes):
         self.is_active = report_in[1]
         report_out = struct.pack('>bbH28x', ord('A'), report_in[1], 0xFF77)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    async def __query(self, report_in: bytes):
+    def __query(self, report_in: bytes):
         slot = report_in[1] % 0x10 + 1
         block = report_in[2]
         report_out = bytearray(self.REPORT_LENGTH)
@@ -105,7 +108,7 @@ class Portal:
         #report_out[3:19] = data
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    async def __write(self, report_in: bytes):
+    def __write(self, report_in: bytes):
         slot = report_in[1] % 0x10 + 1
         block = report_in[2]
         data = report_in[3:19]
@@ -115,17 +118,6 @@ class Portal:
         report_out[1] = report_in[1] # character slot
         report_out[2] = report_in[2] # data block index
         self.portal_hid.send_report(report_out, self.REPORT_ID)
-
-    async def __worker(self):
-        report_task = asyncio.create_task(self.__get_last_received_report())
-        await asyncio.gather(report_task)       
-
-    async def __get_last_received_report(self):
-        while True:
-            report_in = self.portal_hid.get_last_received_report()
-            if (report_in != None):
-                await self.__handle_incoming_report(report_in)
-            await asyncio.sleep(0)
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
