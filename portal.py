@@ -37,15 +37,16 @@ class Portal:
         0xC0,              # End Collection
     ))
 
+    TOY_PATH = "/toy.dump"
+
     def __init__(self, devices: Sequence[usb_hid.Device]) -> None:
         """Create a Portal object that will send and receive HID reports.
         """
         self.portal_hid = self.__find_device(devices)
         self.status_index = 0x00
         self.is_active = 0x00
-
-        with open("/toy.dump", 'rb') as fp:
-            self.toy_data = fp.read()
+        self.toy_needs_saving = False
+        self.__read_toy_from_file()
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
@@ -61,6 +62,8 @@ class Portal:
         report_in = self.portal_hid.get_last_received_report()
         if (report_in != None):
             self.__handle_incoming_report(report_in)
+        if (self.toy_needs_saving):
+            self.__save_toy_to_file()
 
     def __handle_incoming_report(self, report_in: bytes):
         if (report_in[0] == ord('A')):
@@ -124,6 +127,16 @@ class Portal:
         offset = index * 0x10
         length = offset + len(block)
         self.toy_data = self.toy_data[0:offset] + block + self.toy_data[length:]
+        self.toy_needs_saving = True
+
+    def __read_toy_from_file(self):
+        with open(self.TOY_PATH, 'rb') as fp:
+            self.toy_data = fp.read()
+
+    def __save_toy_to_file(self):
+        with open(self.TOY_PATH, 'wb') as fp:
+            fp.write(self.toy_data)
+        self.toy_needs_saving = False
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
