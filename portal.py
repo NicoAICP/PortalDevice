@@ -44,6 +44,9 @@ class Portal:
         self.status_index = 0x00
         self.is_active = 0x00
 
+        with open("/toy.dump", 'rb') as fp:
+            self.toy_data = fp.read()
+
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
         """
@@ -98,26 +101,29 @@ class Portal:
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __query(self, report_in: bytes):
-        slot = report_in[1] % 0x10 + 1
+        #slot = report_in[1] % 0x10 + 1
         block = report_in[2]
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('Q') # 0x51
-        report_out[1] = report_in[1] # character slot
-        report_out[2] = report_in[2] # data block index
-        # TODO: append 16 bytes of requested data block here
-        #report_out[3:19] = data
+        data = self.__read_block(block)
+        report_out = struct.pack('>b2s16s13x', ord('Q'), report_in[1:3], data)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __write(self, report_in: bytes):
-        slot = report_in[1] % 0x10 + 1
+        #slot = report_in[1] % 0x10 + 1
         block = report_in[2]
         data = report_in[3:19]
-        # TODO: write new data block
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('W') # 0x57
-        report_out[1] = report_in[1] # character slot
-        report_out[2] = report_in[2] # data block index
+        self.__write_block(block, data)
+        report_out = struct.pack('>b2s29x', ord('W'), report_in[1:3])
         self.portal_hid.send_report(report_out, self.REPORT_ID)
+
+    def __read_block(self, index: int):
+        offset = index * 0x10
+        length = offset + 0x10
+        return self.toy_data[offset:length]
+
+    def __write_block(self, index: int, block: bytes):
+        offset = index * 0x10
+        length = offset + len(block)
+        self.toy_data = self.toy_data[0:offset] + block + self.toy_data[length:]
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
