@@ -7,9 +7,6 @@ import asyncio
 import binascii
 import usb_hid
 
-from logger import Logger
-
-
 class Portal:
     """Emulates Portal of Power
     """
@@ -44,15 +41,9 @@ class Portal:
     def __init__(self, devices: Sequence[usb_hid.Device]) -> None:
         """Create a Portal object that will send and receive HID reports.
         """
-        self.logger = Logger('portal.py', '/log.txt')
-        self.logger.log(Logger.DEBUG, "__init__")
-        
         self.portal_hid = self.__find_device(devices)
-        self.logger.log(Logger.DEBUG, str(self.portal_hid))
-
         self.status_index = 0x00
         self.is_active = 0x00
-        
         asyncio.run(self.__worker())
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
@@ -69,13 +60,13 @@ class Portal:
         if (report_in[0] == ord('A')):
             await self.__activate(report_in)
         elif (report_in[0] == ord('C')): # ignore
-            self.logger.log(Logger.DEBUG, "Received: Color request -> ignore")
+            pass # ignore color request
         elif (report_in[0] == ord('J')): # ignore
-            self.logger.log(Logger.DEBUG, "Received: Sound request -> ignore")
+            pass # ignore sound request
         elif (report_in[0] == ord('L')): # ignore
-            self.logger.log(Logger.DEBUG, "Received: Light (Trap slot) request -> ignore")
+            pass # ignore light (Trap slot)
         elif (report_in[0] == ord('M')): # ignore
-            self.logger.log(Logger.DEBUG, "Received: Speaker request -> ignore")
+            pass # ignore speaker request -> ignore")
         elif (report_in[0] == ord('Q')):
             await self.__query(report_in)
         elif (report_in[0] == ord('R')):
@@ -85,123 +76,69 @@ class Portal:
         elif (report_in[0] == ord('W')):
             await self.__write(report_in)
         else:
-            self.logger.log(Logger.DEBUG, "Received: Unknown request:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii') + "\n")
+            pass
 
     async def __reset(self, report_in: bytes):
-            self.logger.log(Logger.DEBUG, "Received: Reset (R) request:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
-
-            report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = 0x52
-            report_out[1] = 0x02
-            report_out[2] = 0x18
-
-            self.logger.log(Logger.DEBUG, "Sending: Reset (R) response:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
-
-            self.portal_hid.send_report(report_out, self.REPORT_ID)
+        report_out = bytearray(self.REPORT_LENGTH)
+        report_out[0] = ord('R') # 0x52
+        report_out[1] = 0x02
+        report_out[2] = 0x18
+        self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __status(self, report_in: bytes):
-            if (report_in != None):
-                self.logger.log(Logger.DEBUG, "Received: Status (S) request:")
-                self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
-            else:
-                self.logger.log(Logger.DEBUG, "Proactive status sending...")
-
-            report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = 0x53
-            report_out[1] = 0x03
-            report_out[2] = 0x00
-            report_out[3] = 0x00
-            report_out[4] = 0x00
-            report_out[5] = self.status_index
-            report_out[6] = self.is_active
-
-            self.status_index += 1
-            self.status_index %= 0xFF
-
-            self.logger.log(Logger.DEBUG, "Sending: Status (S) response:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
-
-            self.portal_hid.send_report(report_out, self.REPORT_ID)
+        report_out = bytearray(self.REPORT_LENGTH)
+        report_out[0] = ord('S') # 0x53
+        report_out[1] = 0x03
+        report_out[2] = 0x00
+        report_out[3] = 0x00
+        report_out[4] = 0x00
+        report_out[5] = self.status_index
+        report_out[6] = self.is_active
+        self.status_index += 1
+        self.status_index %= 0xFF
+        self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __activate(self, report_in: bytes):
-            self.logger.log(Logger.DEBUG, "Received: Activate (A) request:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
-
-            self.is_active = report_in[1]
-
-            report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = 0x41
-            report_out[1] = report_in[1]
-            report_out[2] = 0xFF
-            report_out[3] = 0x77
-
-            self.logger.log(Logger.DEBUG, "Sending: Activate (R) response:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
-
-            self.portal_hid.send_report(report_out, self.REPORT_ID)
+        self.is_active = report_in[1]
+        report_out = bytearray(self.REPORT_LENGTH)
+        report_out[0] = ord('A') # 0x41
+        report_out[1] = report_in[1]
+        report_out[2] = 0xFF
+        report_out[3] = 0x77
+        self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __query(self, report_in: bytes):
-            self.logger.log(Logger.DEBUG, "Received: Query (Q) request:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
-
-            slot = report_in[1] % 0x10 + 1
-            block = report_in[2]
-
-            self.logger.log(Logger.DEBUG, "Querying: Character slot %d, data block index %d" % (slot, block))
-
-            report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = 0x51
-            report_out[1] = report_in[1] # character slot
-            report_out[2] = report_in[2] # data block index
-
-            # TODO: append 16 bytes of requested data block here
-            #report_out[3:19] = data
-
-            self.logger.log(Logger.DEBUG, "Sending: Query (Q) response:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
-
-            self.portal_hid.send_report(report_out, self.REPORT_ID)
+        slot = report_in[1] % 0x10 + 1
+        block = report_in[2]
+        report_out = bytearray(self.REPORT_LENGTH)
+        report_out[0] = ord('Q') # 0x51
+        report_out[1] = report_in[1] # character slot
+        report_out[2] = report_in[2] # data block index
+        # TODO: append 16 bytes of requested data block here
+        #report_out[3:19] = data
+        self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __write(self, report_in: bytes):
-            self.logger.log(Logger.DEBUG, "Received: Write (W) request:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_in).decode('ascii'))
-
-            slot = report_in[1] % 0x10 + 1
-            block = report_in[2]
-            data = report_in[3:19]
-
-            self.logger.log(Logger.DEBUG, "Writing: Character slot %d, data block index %d with data:" % (slot, block))
-            self.logger.log(Logger.DEBUG, binascii.hexlify(data).decode('ascii'))
-
-            # TODO: write new data block
-
-            report_out = bytearray(self.REPORT_LENGTH)
-            report_out[0] = 0x57
-            report_out[1] = report_in[1] # character slot
-            report_out[2] = report_in[2] # data block index
-
-            self.logger.log(Logger.DEBUG, "Sending: Write (W) response:")
-            self.logger.log(Logger.DEBUG, binascii.hexlify(report_out).decode('ascii') + "\n")
-
-            self.portal_hid.send_report(report_out, self.REPORT_ID)
+        slot = report_in[1] % 0x10 + 1
+        block = report_in[2]
+        data = report_in[3:19]
+        # TODO: write new data block
+        report_out = bytearray(self.REPORT_LENGTH)
+        report_out[0] = ord('W') # 0x57
+        report_out[1] = report_in[1] # character slot
+        report_out[2] = report_in[2] # data block index
+        self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     async def __worker(self):
-        self.logger.log(Logger.DEBUG, "worker starting")
         report_task = asyncio.create_task(self.__get_last_received_report())
-        await asyncio.gather(report_task)
-        self.logger.log(Logger.DEBUG, "worker done")            
+        await asyncio.gather(report_task)       
 
     async def __get_last_received_report(self):
         while True:
             report_in = self.portal_hid.get_last_received_report()
             if (report_in != None):
                 await self.__handle_incoming_report(report_in)
-                await asyncio.sleep(0.1)
-            else:
-                self.logger.log(Logger.DEBUG, "waiting for new report...")
+            await asyncio.sleep(0)
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
