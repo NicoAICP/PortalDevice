@@ -3,8 +3,48 @@ try:
 except ImportError:
     pass
 
+import os
 import struct
+
 import usb_hid
+
+class Toy:
+    """Toy used per Slot in the Portal
+    """
+
+    def __init__(self, path: str):
+        self.needs_saving = False
+        self.path = path
+        with open(self.path, 'rb') as fp:
+            self.data = fp.read()
+
+    def read_block(self, index: int):
+        offset = index * 0x10
+        length = offset + 0x10
+        return self.data[offset:length]
+
+    def write_block(self, index: int, block: bytes):
+        offset = index * 0x10
+        length = offset + len(block)
+        self.data = self.data[0:offset] + block + self.data[length:]
+
+    def save(self):
+        with open(self.path, 'wb') as fp:
+            fp.write(self.data)
+
+class Slot:
+    """Slots used by Portal
+    """
+
+    STATUS_EMPTY = 0
+    STATUS_PRESENT = 1
+    STATUS_REMOVED = 2
+    STATUS_ADDED = 3
+
+    def __init__(self):
+        self.toy = None
+        self.status = Slot.STATUS_EMPTY
+
 
 class Portal:
     """Emulates Portal of Power
@@ -19,6 +59,9 @@ class Portal:
     USAGE = 0x01
     REPORT_ID = 0
     REPORT_LENGTH = 32
+
+    MAX_TOYS = 6
+    DEFAULT_TOY_PATH = "/toy_{}.dump"
 
     PORTAL_REPORT_DESCRIPTOR = bytes((
         0x06, 0x00, 0xFF,  # Usage Page (Vendor Defined 0xFF00)
@@ -37,16 +80,13 @@ class Portal:
         0xC0,              # End Collection
     ))
 
-    TOY_PATH = "/toy.dump"
-
     def __init__(self, devices: Sequence[usb_hid.Device]) -> None:
         """Create a Portal object that will send and receive HID reports.
         """
         self.portal_hid = self.__find_device(devices)
         self.status_index = 0x00
         self.is_active = 0x00
-        self.toy_needs_saving = False
-        self.__read_toy_from_file()
+        self.__init_slots()
 
     def __find_device(self, devices: Sequence[usb_hid.Device]) -> usb_hid.Device:
         """Search through the provided sequence of devices to find the USB HID Portal device.
@@ -62,8 +102,22 @@ class Portal:
         report_in = self.portal_hid.get_last_received_report()
         if (report_in != None):
             self.__handle_incoming_report(report_in)
-        if (self.toy_needs_saving):
-            self.__save_toy_to_file()
+        self.__save_toys()
+
+    def update_slot(self, index: int, status: int):
+        if (status == Slot.STATUS_ADDED):
+            toy_path = self.DEFAULT_TOY_PATH.format(index + 1)
+            if (Portal.file_exists(toy_path)):
+                self.slots[index].toy = Toy(toy_path)
+                self.slots[index].status = Slot.STATUS_ADDED
+            else:
+                self.slots[index].toy = None
+                self.slots[index].status = Slot.STATUS_EMPTY
+        elif (status == Slot.STATUS_REMOVED):
+            self.slots[index].toy = None
+            self.slots[index].status = Slot.STATUS_REMOVED
+        elif (status == Slot.STATUS_PRESENT):
+            self.slots[index].status = Slot.STATUS_PRESENT
 
     def __handle_incoming_report(self, report_in: bytes):
         if (report_in[0] == ord('A')):
@@ -93,7 +147,10 @@ class Portal:
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __status(self):
-        report_out = struct.pack('>bIbb25x', ord('S'), 0x03000000, self.status_index, self.is_active)
+        slot_status = 0x00000000
+        for index in range(self.MAX_TOYS):
+            slot_status ^= self.slots[index].status << 2 * (index)
+        report_out = struct.pack('<bIbb25x', ord('S'), slot_status, self.status_index, self.is_active)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
         self.status_index += 1
         self.status_index %= 0xFF
@@ -102,41 +159,35 @@ class Portal:
         self.is_active = report_in[1]
         report_out = struct.pack('>bbH28x', ord('A'), report_in[1], 0xFF77)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
+        #self.__status() # proactively send status
 
     def __query(self, report_in: bytes):
-        #slot = report_in[1] % 0x10 + 1
+        slot = report_in[1] % 0x10
         block = report_in[2]
-        data = self.__read_block(block)
+        data = self.slots[slot].toy.read_block(block)
         report_out = struct.pack('>b2s16s13x', ord('Q'), report_in[1:3], data)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __write(self, report_in: bytes):
-        #slot = report_in[1] % 0x10 + 1
+        slot = report_in[1] % 0x10
         block = report_in[2]
         data = report_in[3:19]
-        self.__write_block(block, data)
+        self.slots[slot].toy.write_block(block, data)
+        self.slots[slot].toy.needs_saving = True
         report_out = struct.pack('>b2s29x', ord('W'), report_in[1:3])
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
-    def __read_block(self, index: int):
-        offset = index * 0x10
-        length = offset + 0x10
-        return self.toy_data[offset:length]
+    def __init_slots(self):
+        self.slots = []
+        for index in range(self.MAX_TOYS):
+            self.slots.append(Slot())
+            self.update_slot(index, Slot.STATUS_ADDED)
 
-    def __write_block(self, index: int, block: bytes):
-        offset = index * 0x10
-        length = offset + len(block)
-        self.toy_data = self.toy_data[0:offset] + block + self.toy_data[length:]
-        self.toy_needs_saving = True
-
-    def __read_toy_from_file(self):
-        with open(self.TOY_PATH, 'rb') as fp:
-            self.toy_data = fp.read()
-
-    def __save_toy_to_file(self):
-        with open(self.TOY_PATH, 'wb') as fp:
-            fp.write(self.toy_data)
-        self.toy_needs_saving = False
+    def __save_toys(self):
+        for index in range(self.MAX_TOYS):
+            if (self.slots[index].toy.needs_saving):
+                self.slots[index].toy.save()
+                self.slots[index].toy.needs_saving = False
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:
@@ -151,3 +202,10 @@ class Portal:
             out_report_lengths = (Portal.REPORT_LENGTH,), # The portal receives 32 bytes in its report. ## Must match number of bytes above! (Report Size * Report Count)
         )
 
+    @staticmethod
+    def file_exists(path: str) -> bool:
+        try:
+            os.stat(path)
+            return True
+        except:
+            return False
