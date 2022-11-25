@@ -40,12 +40,16 @@ class Portal:
         0xC0,              # End Collection
     ))
 
+    TOY_PATH = "/toy.dump"
+
     def __init__(self, devices: Sequence[usb_hid.Device]) -> None:
         """Create a Portal object that will send and receive HID reports.
         """
         self.portal_hid = self.__find_device(devices)
         self.status_index = 0x00
         self.is_active = 0x00
+        self.toy_needs_saving = False
+        self.__read_toy_from_file()
 
         self.slots = [Slot] * self.MAX_TOYS
         for index in range(self.MAX_TOYS):            
@@ -65,6 +69,8 @@ class Portal:
         report_in = self.portal_hid.get_last_received_report()
         if (report_in != None):
             self.__handle_incoming_report(report_in)
+        if (self.toy_needs_saving):
+            self.__save_toy_to_file()
 
     def __handle_incoming_report(self, report_in: bytes):
         if (report_in[0] == ord('A')):
@@ -105,26 +111,39 @@ class Portal:
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __query(self, report_in: bytes):
-        slot = report_in[1] % 0x10 + 1
+        #slot = report_in[1] % 0x10 + 1
         block = report_in[2]
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('Q') # 0x51
-        report_out[1] = report_in[1] # character slot
-        report_out[2] = report_in[2] # data block index
-        # TODO: append 16 bytes of requested data block here
-        #report_out[3:19] = data
+        data = self.__read_block(block)
+        report_out = struct.pack('>b2s16s13x', ord('Q'), report_in[1:3], data)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __write(self, report_in: bytes):
-        slot = report_in[1] % 0x10 + 1
+        #slot = report_in[1] % 0x10 + 1
         block = report_in[2]
         data = report_in[3:19]
-        # TODO: write new data block
-        report_out = bytearray(self.REPORT_LENGTH)
-        report_out[0] = ord('W') # 0x57
-        report_out[1] = report_in[1] # character slot
-        report_out[2] = report_in[2] # data block index
+        self.__write_block(block, data)
+        report_out = struct.pack('>b2s29x', ord('W'), report_in[1:3])
         self.portal_hid.send_report(report_out, self.REPORT_ID)
+
+    def __read_block(self, index: int):
+        offset = index * 0x10
+        length = offset + 0x10
+        return self.toy_data[offset:length]
+
+    def __write_block(self, index: int, block: bytes):
+        offset = index * 0x10
+        length = offset + len(block)
+        self.toy_data = self.toy_data[0:offset] + block + self.toy_data[length:]
+        self.toy_needs_saving = True
+
+    def __read_toy_from_file(self):
+        with open(self.TOY_PATH, 'rb') as fp:
+            self.toy_data = fp.read()
+
+    def __save_toy_to_file(self):
+        with open(self.TOY_PATH, 'wb') as fp:
+            fp.write(self.toy_data)
+        self.toy_needs_saving = False
 
     @staticmethod
     def get_hid_device() -> usb_hid.Device:

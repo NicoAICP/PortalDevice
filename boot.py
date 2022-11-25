@@ -1,4 +1,5 @@
 import board
+import storage
 import supervisor
 import usb_cdc
 import usb_hid
@@ -10,7 +11,9 @@ from portal import Portal
 
 safe_mode.enable(board.GP14, Pull.UP)
 
-#storage.disable_usb_drive()
+storage.remount("/", False)
+
+storage.disable_usb_drive()
 usb_cdc.disable()
 usb_midi.disable()
 
