@@ -150,7 +150,7 @@ class Portal:
         slot_status = 0x00000000
         for index in range(self.MAX_TOYS):
             slot_status ^= self.slots[index].status << 2 * (index)
-        report_out = struct.pack('>bIbb25x', ord('S'), slot_status, self.status_index, self.is_active)
+        report_out = struct.pack('<bIbb25x', ord('S'), slot_status, self.status_index, self.is_active)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
         self.status_index += 1
         self.status_index %= 0xFF
