@@ -162,14 +162,14 @@ class Portal:
         #self.__status() # proactively send status
 
     def __query(self, report_in: bytes):
-        slot = report_in[1] % 0x10 + 1
+        slot = report_in[1] % 0x10
         block = report_in[2]
         data = self.slots[slot].toy.read_block(block)
         report_out = struct.pack('>b2s16s13x', ord('Q'), report_in[1:3], data)
         self.portal_hid.send_report(report_out, self.REPORT_ID)
 
     def __write(self, report_in: bytes):
-        slot = report_in[1] % 0x10 + 1
+        slot = report_in[1] % 0x10
         block = report_in[2]
         data = report_in[3:19]
         self.slots[slot].toy.write_block(block, data)
