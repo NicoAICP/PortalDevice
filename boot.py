@@ -13,8 +13,8 @@ safe_mode.enable(board.GP14, Pull.UP)
 
 storage.remount("/", False)
 
-storage.disable_usb_drive()
-usb_cdc.disable()
+#storage.disable_usb_drive()
+#usb_cdc.disable()
 usb_midi.disable()
 
 supervisor.set_usb_identification(Portal.MANUFACTURER, Portal.PRODUCT, Portal.VID, Portal.PID)
