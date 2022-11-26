@@ -102,7 +102,7 @@ class Portal:
         report_in = self.portal_hid.get_last_received_report()
         if (report_in != None):
             self.__handle_incoming_report(report_in)
-        self.__save_toys()
+            self.__save_toys()
 
     def update_slot(self, index: int, status: int):
         if (status == Slot.STATUS_ADDED):
